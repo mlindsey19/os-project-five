@@ -14,18 +14,19 @@ static void getMSG();
 
 char * clockaddr;
 char * resdescpaddr;
+char * msgqueaddr;
 
 //communication
 SimClock * simClock;
 ResDesc * resDesc;
 sem_t * editResDesc;
-mqd_t mq_allocate;
-mqd_t mq_realsed;
 
+
+MsgQue * msgQue;
 
 
 int main() {
-
+printf("hi\n");
     communication();
     sleep(1);
     getMSG();
@@ -49,22 +50,20 @@ static void communication(){
 
     editResDesc = openSem();
 
-    mq_allocate = openQueAl( 0 ); // 0 -> not parent
-    mq_realsed = openQueRel( 0 ); // 0 -> not parent
+    msgqueaddr = getMsgQueMem();
+    msgQue = ( MsgQue *) msgqueaddr;
+
 
 }
 
 
 static void getMSG(){
-    char buf[ BUFF_sz + 1 ];
+    char buf[ BUFF_sz ];
     ssize_t bytes_read;
-    memset(buf, 0x00, sizeof(buf));
-    bytes_read = mq_receive(mq_allocate, buf, BUFF_sz, NULL);
-    if(bytes_read >= 0) {
-        printf("child: Received message: %s\n", buf);
-    } else {
-        printf("child: None \n");
-    }
+    memset(buf, 0, BUFF_sz);
+    strcpy(buf, msgQue->buf);
+    printf("child: Received message: %s\n", buf);
 
-    fflush(stdout);
+
+//    fflush(stdout);
 }

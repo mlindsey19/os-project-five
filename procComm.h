@@ -12,6 +12,7 @@
 #include <mqueue.h>
 #include <stdio.h>
 
+#define BUFF_sz 32
 
 typedef struct {
     unsigned int sec;
@@ -29,14 +30,18 @@ typedef struct {
 }ResDesc;
 #define BUFF_resdesc sizeof( ResDesc )
 
+typedef struct {
+    int ra; // release/allocate 1/0
+    int hasBeenRead; // 1 -> yes and ready to be replaced
+    pid_t pid; // for send to specific child
+    char buf[BUFF_sz];
+}MsgQue;
+#define BUFF_msgque sizeof( MsgQue )
+
 #define PLIMIT 20
 #define BILLION 1000000000
-#define BUFF_sz 32
 #define KEY_PATH "/tmp"
 #define SEM_RD "/sem_rd"
-
-#define QUEUE_REL  "/release_queue"
-#define QUEUE_AL  "/allocate_queue"
 
 
 
@@ -45,8 +50,9 @@ typedef struct {
 
 
 
-mqd_t openQueRel( int isParent ) ;
-mqd_t openQueAl( int isParent ) ;
+void deleteMsgQueMem( char * paddr );
+char * getMsgQueMem();
+
 
 sem_t * openSem();
 
@@ -55,6 +61,6 @@ void deleteClockMem( char * paddr );
 
 char * getResDescMem();
 void deleteResDesripMem( char * paddr );
-void deleteSemAndQue() ;
+void deleteSem() ;
 
 #endif //PROJECT_FIVE_PROCCOMM_H

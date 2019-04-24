@@ -1,5 +1,6 @@
 
 #include <time.h>
+#include <string.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -12,6 +13,7 @@ static SimClock nextProcTime();
 static void generateProc();
 static void communication();
 void sigHandle(int);
+void sendMSG();
 
 int processLimit = 1;
 int activeLimit = 1;
@@ -25,6 +27,7 @@ void cleanSHM();
 
 char * clockaddr;
 char * resdescpaddr;
+char * msgqueaddr;
 char output[BUFF_sz] = "input.txt";
 SimClock gentime;
 pid_t pids[PLIMIT];
@@ -34,9 +37,9 @@ const char path[] = "./user";
 //communication
 SimClock * simClock;
 ResDesc * resDesc;
+MsgQue * msgQue;
 sem_t * editResDesc;
-mqd_t mq_allocate;
-mqd_t mq_realsed;
+
 
 
 
@@ -46,15 +49,17 @@ int main() {
     alarm(3);
     communication();
 
+//
+//    while(1){
+//        if( total == processLimit && active == 0)
+//            break;
+//        increment();
+    //  if( total == 0)
+    generateProc();
+    sendMSG();
+    sleep(2);
 
-    while(1){
-        if( total == processLimit && active == 0)
-            break;
-        increment();
-        if( total == 0)
-            generateProc();
-
-    }
+//    }
 
 
 
@@ -64,7 +69,8 @@ int main() {
 static void deleteMemory() {
     deleteClockMem(clockaddr);
     deleteResDesripMem(resdescpaddr);
-    deleteSemAndQue();
+    deleteSem();
+    deleteMsgQueMem(msgqueaddr);
 }
 static void increment(){
     struct timespec ts;
@@ -150,18 +156,19 @@ static void communication(){
 
     editResDesc = openSem();
 
-    mq_allocate = openQueAl( 1 ); // 1 for is parent
-    mq_realsed = openQueRel( 1 ); // 1 for is parent
+    msgqueaddr = getMsgQueMem();
+    msgQue = ( MsgQue *) msgqueaddr;
 
 }
 
 void sendMSG(){
     char buf[ BUFF_sz  ];
-
+    memset(msgQue->buf, 0, BUFF_sz);
     snprintf(buf, BUFF_sz, "MESSAGE %d",getpid() );
+    strncpy( msgQue->buf, buf, BUFF_sz -1 );
 
     printf("Parent: Send message... \n");
-    mq_send(mq_allocate, buf, BUFF_sz, 0);
 
-    fflush(stdout);
+
+    //  fflush(stdout);
 }

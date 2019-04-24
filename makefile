@@ -3,10 +3,10 @@
 #04-23-2019
 
 CC = cc
-CFLAGS = -g -Wall -lrt
+CFLAGS = -g -Wall -lrt -pthread
 
 OBJ1 = oss.o checkargs.o procComm.o
-OBJ2 = user.o
+OBJ2 = user.o procComm.o
 
 TARGET1 = oss
 TARGET2 = user
