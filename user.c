@@ -19,20 +19,27 @@ char * msgqueaddr;
 //communication
 SimClock * simClock;
 ResDesc * resDesc;
-sem_t * editResDesc;
+static sem_t * semDesc;
+static sem_t * semMsg;
 
 
 MsgQue * msgQue;
 
 
 int main() {
-printf("hi\n");
+    printf("hi\n");
     communication();
-    sleep(1);
+
+    int sv;
+    sem_getvalue(semMsg, &sv );
+
+
+    sem_wait(semMsg);
+
     getMSG();
 
 
-    return 0;
+    exit(808);
 }
 
 void sigHandle(int cc){
@@ -48,7 +55,8 @@ static void communication(){
     resdescpaddr = getResDescMem();
     resDesc = ( ResDesc * ) resdescpaddr;
 
-    editResDesc = openSem();
+    semDesc = openSemResDesc();
+    semMsg = openSemAloRes();
 
     msgqueaddr = getMsgQueMem();
     msgQue = ( MsgQue *) msgqueaddr;
@@ -59,7 +67,6 @@ static void communication(){
 
 static void getMSG(){
     char buf[ BUFF_sz ];
-    ssize_t bytes_read;
     memset(buf, 0, BUFF_sz);
     strcpy(buf, msgQue->buf);
     printf("child: Received message: %s\n", buf);

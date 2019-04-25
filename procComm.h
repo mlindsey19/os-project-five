@@ -42,6 +42,7 @@ typedef struct {
 #define BILLION 1000000000
 #define KEY_PATH "/tmp"
 #define SEM_RD "/sem_rd"
+#define SEM_MSG "/sem_msg"
 
 
 
@@ -53,8 +54,8 @@ typedef struct {
 void deleteMsgQueMem( char * paddr );
 char * getMsgQueMem();
 
-
-sem_t * openSem();
+sem_t * openSemAloRes();
+sem_t * openSemResDesc();
 
 char * getClockMem();
 void deleteClockMem( char * paddr );

@@ -40,10 +40,15 @@ void deleteMsgQueMem( char * paddr ){
     }
 }
 
-sem_t * openSem(){
+sem_t * openSemResDesc(){
     sem_t * sem = sem_open(SEM_RD, O_CREAT, PERM, 1);
     return sem;
 }
+sem_t * openSemAloRes(){
+    sem_t * sem = sem_open(SEM_MSG, O_CREAT, PERM, 1);
+    return sem;
+}
+
 char * getClockMem(){
     key_t shmkey;
 
@@ -108,6 +113,7 @@ void deleteResDesripMem( char * paddr ){
 void deleteSem() {
 
     sem_unlink(SEM_RD);
+    sem_unlink(SEM_MSG);
 
     // unlink message ques
 

@@ -38,15 +38,15 @@ const char path[] = "./user";
 SimClock * simClock;
 ResDesc * resDesc;
 MsgQue * msgQue;
-sem_t * editResDesc;
-
+static sem_t * sem_desc;
+static sem_t * semMsg;
 
 
 
 int main() {
     signal( SIGINT, sigHandle );
     signal( SIGALRM, sigHandle );
-    alarm(3);
+    alarm(30);
     communication();
 
 //
@@ -56,11 +56,19 @@ int main() {
 //        increment();
     //  if( total == 0)
     generateProc();
+    printf("p - hi\n");
+    int sv;
+    sem_wait(semMsg);
+    sem_getvalue(semMsg, &sv );
+
     sendMSG();
-    sleep(2);
+    sleep(5);
+    sem_post(semMsg);
+    sem_getvalue(semMsg, &sv );
 
 //    }
 
+    sleep(5);
 
 
     return 0;
@@ -154,8 +162,8 @@ static void communication(){
     resDesc = ( ResDesc * ) resdescpaddr;
     makeResources();
 
-    editResDesc = openSem();
-
+    sem_desc = openSemResDesc();
+    semMsg = openSemAloRes();
     msgqueaddr = getMsgQueMem();
     msgQue = ( MsgQue *) msgqueaddr;
 
