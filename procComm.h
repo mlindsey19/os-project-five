@@ -12,7 +12,7 @@
 #include <mqueue.h>
 #include <stdio.h>
 
-#define BUFF_sz 32
+#define BUFF_sz 64
 
 typedef struct {
     unsigned int sec;
@@ -23,7 +23,6 @@ typedef struct {
 typedef struct {
     int requests;
     int allocated; //total (including special)
-    int specAlloc;
     int released;
     int sharable;
     int total;
@@ -31,16 +30,17 @@ typedef struct {
 #define BUFF_resdesc sizeof( ResDesc )
 
 typedef struct {
-    int ra; // release/allocate 1/0
+    int rra; // release -> 2; request -> 1; allocate ->0
     int hasBeenRead; // 1 -> yes and ready to be replaced
     pid_t pid; // for send to specific child
     char buf[BUFF_sz];
 }MsgQue;
 #define BUFF_msgque sizeof( MsgQue )
+#define MAX_MSGS 64
 
 #define PLIMIT 20
 #define BILLION 1000000000
-#define KEY_PATH "/tmp"
+#define KEY_PATH "keys_tmp"
 #define SEM_RD "/sem_rd"
 #define SEM_MSG "/sem_msg"
 

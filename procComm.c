@@ -15,10 +15,10 @@ char * getMsgQueMem(){
         perror("IPC error: ftok");
     }
     char * paddr;
-    int shmid = shmget ( shmkey, 32 * BUFF_msgque, PERM | IPC_CREAT );
+    int shmid = shmget ( shmkey, MAX_MSGS * BUFF_msgque, PERM | IPC_CREAT );
 
     if ( shmid == -1 )
-        perror( "parent - error shmid" );
+        perror( "msgque get mem - error shmid" );
 
     paddr = ( char * ) ( shmat ( shmid, 0,0));
 
@@ -31,7 +31,7 @@ void deleteMsgQueMem( char * paddr ){
         perror("IPC error: ftok");
     }
 
-    int shmid = shmget ( shmkey, 32 * BUFF_msgque, PERM );
+    int shmid = shmget ( shmkey, MAX_MSGS * BUFF_msgque, PERM );
 
     shmctl(shmid, IPC_RMID, NULL);
 
@@ -59,7 +59,7 @@ char * getClockMem(){
     int shmid = shmget ( shmkey, BUFF_clock, PERM | IPC_CREAT );
 
     if ( shmid == -1 )
-        perror( "parent - error shmid" );
+        perror( "get clock mem - error shmid" );
 
     paddr = ( char * ) ( shmat ( shmid, 0,0));
 
@@ -74,11 +74,12 @@ void deleteClockMem( char * paddr ){
 
     int shmid = shmget ( shmkey, BUFF_clock, PERM );
 
-    shmctl(shmid, IPC_RMID, NULL);
 
     if(  shmdt( paddr )  == -1 ){
         perror("err shmdt clock");
     }
+    shmctl(shmid, IPC_RMID, NULL);
+
 }
 char * getResDescMem(){
     key_t shmkey;
@@ -88,9 +89,8 @@ char * getResDescMem(){
     }
     char * paddr;
     int shmid = shmget ( shmkey, 20 * BUFF_resdesc, PERM | IPC_CREAT );
-
     if ( shmid == -1 )
-        perror( " error shmid  res desc" );
+        perror( "error shmid  res desc" );
 
     paddr = ( char * ) ( shmat ( shmid, 0,0));
 
