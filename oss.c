@@ -21,8 +21,8 @@ static void giveResources();
 
 
 static pid_t pids[ PLIMIT ];
-static int processLimit = 8;
-static int activeLimit = 8;
+static int processLimit = 4;
+static int activeLimit = 2;
 static int active = 0;
 static int total = 0;
 static int maxTimeBetweenNewProcsSecs = 5;
@@ -62,6 +62,7 @@ int main() {
 
     nextProcTime();
     while(1){
+        usleep(100);
         if( total == processLimit && active == 0)
             break;
         increment();
@@ -227,7 +228,7 @@ static void sendMSG( pid_t pid ){
                 break;
             }
         }
-        printf("p - sig %u\n", pid);
+  //      printf("p - sig %u\n", pid);
 
         kill(pid, SIGUSR1);
         sem_post(semMsg);
@@ -301,7 +302,7 @@ static void checkMSG(){
                 } else {
  //                   printf("request : %s\n", buf);
                     msgQue[i].hasBeenRead = 1; //true
-                    appendRequestVector(buf, msgQue->pid);
+                    appendRequestVector(buf, msgQue[i].pid);
                 }
             }
         }

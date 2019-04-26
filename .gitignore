@@ -4,7 +4,8 @@ CMakeLists.txt
 cmake_install.cmake
 
 .idea/
-
+oss
+user
 *.swp
 *.bak
 *.out

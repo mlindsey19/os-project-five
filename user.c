@@ -29,6 +29,9 @@ static ResDesc * resDesc;
 static sem_t * semDesc;
 static sem_t * semMsg;
 static MsgQue * msgQue;
+sigset_t sigset;
+int sig;
+
 
 
 // resource vectors
@@ -45,18 +48,19 @@ void sigHandle(int );
 
 
 int main() {
-    printf("hi %i\n", getpid());
     signal(SIGUSR1, sigHandle);
     communication();
     initUserParams();
     nextResTime();
+    printf("hi %i\n", getpid());
     askForMore();
     while (1) {
 
         if ( simClock->sec >= nextRes.sec && simClock->ns > nextRes.ns ){
-            if( rand()%2 )
+            if( rand()%2 ) {
                 askForMore();
-            else
+                sigwait(&sigset, &sig);
+            }else
                 giveUpSome();
         }
         if (simClock->sec >= minTimeAlive.sec && simClock->ns > minTimeAlive.ns) {
@@ -84,7 +88,7 @@ static void incrAlive(){
     }
 }
 void sigHandle(int cc){
- //   printf("c - sig\n");
+    //   printf("c - sig\n");
     getMSG();
 }
 
@@ -101,8 +105,10 @@ static void initUserParams(){
     }
     requestOrReleaseRate = rand() % ( BILLION / 10 );
 
-    minTimeAlive.sec = ( ( rand() % 2 ) + 1 ) +  simClock->sec;
+    minTimeAlive.sec = ( ( rand() % 10 ) + 1 ) +  simClock->sec;
     minTimeAlive.ns =  ( rand() % BILLION )  + simClock->ns;
+    printf("%i - %is %ins \n ",getpid(), minTimeAlive.sec, minTimeAlive.ns  );
+
     nextRes.sec = simClock->sec;
     nextRes.ns = simClock->ns;
 
@@ -119,6 +125,8 @@ static void communication(){
 
     msgqueaddr = getMsgQueMem();
     msgQue = ( MsgQue *) msgqueaddr;
+    sigemptyset(&sigset);
+    sigaddset(&sigset, SIGUSR1);
 
 
 }
@@ -128,13 +136,13 @@ static void appendAcquiredVector(char * buf){
     for ( i = 0;i < 20; i++ ){
         sscanf(buf, "%d %[^\n]", &temp, buf);
         acquiredVector[ i ] = temp;
-        printf("%i-\n s %s", temp, buf);
+        //    printf("%i-\n s %s", temp, buf);
     }
 }
 
 static void getMSG() {
     //enter critical
- //   printf("c - try enter crit to get\n");
+    //   printf("c - try enter crit to get\n");
     if( !sem_trywait(semMsg)){
 
         int i, f;
@@ -143,22 +151,22 @@ static void getMSG() {
         pid_t pid = getpid();
 
 
- //       printf("c - enter crit to get\n");
+        //       printf("c - enter crit to get\n");
         f = 0;
         for (i = 0; i < MAX_MSGS; i++) {
-   //         printf("c - rra: %i - mpid %i hsb %i %s\n", msgQue[i].rra,
-   //                msgQue[i].pid, msgQue[i].hasBeenRead, buf);
+            //         printf("c - rra: %i - mpid %i hsb %i %s\n", msgQue[i].rra,
+            //                msgQue[i].pid, msgQue[i].hasBeenRead, buf);
 
             if (!msgQue[i].rra && msgQue[i].pid == pid && !msgQue[i].hasBeenRead) {
                 strncpy(buf, msgQue[i].buf, (BUFF_sz - 1));
-    //            printf("child: Received message: %s\n", buf);
+                //            printf("child: Received message: %s\n", buf);
                 msgQue[i].hasBeenRead = 1;//true
                 f = 1;
                 break;
             }
         }
         sem_post(semMsg);
-     //   printf("c - leave crit to get\n");
+        //   printf("c - leave crit to get\n");
 
         //leave critical
         if (f)
@@ -167,7 +175,7 @@ static void getMSG() {
 }
 static void sendMSG( int fl ){   // fl 1-> release 0->request
     //enter critical
- //   printf("c - try enter crit to send\n");
+    //   printf("c - try enter crit to send\n");
     if (! sem_trywait(semMsg) ){
 
         char buf[BUFF_sz];
@@ -180,7 +188,7 @@ static void sendMSG( int fl ){   // fl 1-> release 0->request
             else
                 sprintf(buf, "%s%d ", buf, requestVector[i]);
         }
-   //     printf("c - enter crit to send\n");
+        //     printf("c - enter crit to send\n");
 
         for (i = 0; i < MAX_MSGS; i++) {
             if (msgQue[i].hasBeenRead) {
@@ -192,10 +200,10 @@ static void sendMSG( int fl ){   // fl 1-> release 0->request
                 break;
             }
         }
-     //   printf("child %i: Send message..  %s - fl %i\n", getpid(), buf,fl);
+        //   printf("child %i: Send message..  %s - fl %i\n", getpid(), buf,fl);
 
         sem_post(semMsg);
-     //   printf("c - leave crit to send\n");
+        //   printf("c - leave crit to send\n");
 
         //leave critical
 
@@ -239,13 +247,13 @@ static void nextResTime(){
         x.ns -= BILLION;
         assert( x.ns <= BILLION && "x - too many nanoseconds");
     }
-    printf("child %i give or ask at  %is %ins\n", getpid(), x.sec, x.ns);
+    //  printf("child %i give or ask at  %is %ins\n", getpid(), x.sec, x.ns);
 
     nextRes =  x;
 }
 static void giveAllBack( ){
     //enter critical
- //   printf("c - try enter crit to send all\n");
+    //   printf("c - try enter crit to send all\n");
 
     if ( !sem_trywait( semMsg ) ) {
         char buf[ BUFF_sz  ];
@@ -270,7 +278,7 @@ static void giveAllBack( ){
             }
         }
         sem_post(semMsg);
- //       printf("c - leave crit to send all\n");
+        //       printf("c - leave crit to send all\n");
 
         //leave critical
 
