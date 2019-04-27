@@ -13,6 +13,7 @@ static void nextProcTime();
 static void generateProc();
 static void communication();
 static void sigHandle(int);
+static void childHandle(int);
 static void sendMSG( pid_t );
 static int getIndexFromPid(int);
 static void createResources();
@@ -21,8 +22,8 @@ static void giveResources();
 
 
 static pid_t pids[ PLIMIT ];
-static int processLimit = 4;
-static int activeLimit = 2;
+static int processLimit = 1;
+static int activeLimit = 1;
 static int active = 0;
 static int total = 0;
 static int maxTimeBetweenNewProcsSecs = 5;
@@ -33,7 +34,8 @@ void childrenStatus();
 
 static char * clockaddr;
 static char * resdescpaddr;
-static char * msgqueaddr;
+static char * msgqueAaddr;
+static char * msgqueGaddr;
 //static char output[BUFF_sz] = "input.txt";
 static SimClock gentime;
 const char user[] = "user";
@@ -42,9 +44,11 @@ const char path[] = "./user";
 //communication
 static SimClock * simClock;
 static ResDesc * resDesc;
-static MsgQue * msgQue;
-static sem_t * sem_desc;
-static sem_t * semMsg;
+static MsgQue * msgQueG;
+static MsgQue * msgQueA;
+static sem_t * semMsgA;
+static sem_t * semMsgG;
+static int spinlock;
 
 // vectors
 static int allocateVector [ 20 ];
@@ -52,22 +56,26 @@ static int availableVector[ 20 ];
 static int maxVector[ 20 ];
 static int requests[ 20 ][ 20 ];
 
+//slowdown to prevent starvation
+static unsigned int slowdown;
+
 
 int main() {
+    slowdown = 0;
     signal( SIGINT, sigHandle );
+    //  signal( SIGCHLD, childHandle );
     signal( SIGALRM, sigHandle );
-    alarm(130);
+    ualarm(100000,0);
     communication();
     createResources();
 
     nextProcTime();
     while(1){
-        usleep(100);
         if( total == processLimit && active == 0)
             break;
         increment();
-        if ((active < activeLimit) && ( total < processLimit ) &&
-            (simClock->sec >= gentime.sec && simClock->ns > gentime.ns)) {
+        if ( ( active < activeLimit ) && ( total < processLimit ) &&
+             ( simClock->sec >= gentime.sec && simClock->ns > gentime.ns ) ) {
 
             generateProc();
             printf("p -proc gen\n");
@@ -75,22 +83,15 @@ int main() {
         checkMSG();
 
         childrenStatus();
-
         giveResources();
-//        int k =0 ;
-//        if ( !k ){
-//            k =30;
-//            printf("%i\n",simClock->ns);
-//        }
-//        k--;
 
     }
 
-
-
-
     cleanSHM();
     return 0;
+}
+static void slowDown(){
+    slowdown = ( slowdown > 30000 ) ? 0 : slowdown;
 }
 static void printReqArray() {
     int i, j;
@@ -107,7 +108,8 @@ static void deleteMemory() {
     deleteClockMem(clockaddr);
     deleteResDesripMem(resdescpaddr);
     deleteSem();
-    deleteMsgQueMem(msgqueaddr);
+    deleteMsgQueAMem(msgqueAaddr);
+    deleteMsgQueGMem(msgqueGaddr);
 }
 static void increment(){
     struct timespec ts;
@@ -119,10 +121,15 @@ static void increment(){
         simClock->ns -= BILLION;
         assert( simClock->ns <= BILLION && "too many nanoseconds");
     }
+
+
 }
 
-void sigHandle( int cc ){
+static void sigHandle( int cc ){
     cleanSHM();
+}
+static void childHandle( int cc ){
+    childrenStatus();
 }
 void cleanSHM(){
     int i;
@@ -141,6 +148,7 @@ void childrenStatus() {
     int i, status;
     for (i = 0; i < processLimit; i++) {
         if (pids[i] > 0) {
+      //      printf("p - checking children\n");
             pid = waitpid(pids[i], &status, WNOHANG);
             if (WIFEXITED(status) && WEXITSTATUS(status) == 808 && pid != 0 ) {
                 pids[i] = 0;
@@ -187,13 +195,18 @@ static void communication(){
     simClock->sec = 0;
     simClock->ns = 0;
 
+
     resdescpaddr = getResDescMem();
     resDesc = ( ResDesc * ) resdescpaddr;
 
-    sem_desc = openSemResDesc();
-    semMsg = openSemAloRes();
-    msgqueaddr = getMsgQueMem();
-    msgQue = ( MsgQue *) msgqueaddr;
+    semMsgG = openSemResDesc();
+    semMsgA = openSemAloRes();
+
+    msgqueGaddr = getMsgQueGMem();
+    msgQueG = ( MsgQue *) msgqueGaddr;
+
+    msgqueAaddr = getMsgQueAMem();
+    msgQueA = ( MsgQue *) msgqueAaddr;
 
 }
 static int getIndexFromPid(int pid){
@@ -203,11 +216,17 @@ static int getIndexFromPid(int pid){
             return i;
     return 0;
 }
+static void clearallovec(){
+    int i;
+    for ( i = 0 ; i < 20; i++ ){
+        allocateVector[i] = 0;
+    }
+}
 
 static void sendMSG( pid_t pid ){
     //enter critical
- //   printf( "p - try enter crit to send\n" );
-    if ( !sem_trywait(semMsg) ) {
+    printf("p - try enter crit to send\n");
+    if (!sem_trywait(semMsgA)) {
 
         char buf[BUFF_sz - 1];
         memset(buf, 0, BUFF_sz - 1);
@@ -216,29 +235,31 @@ static void sendMSG( pid_t pid ){
             sprintf(buf, "%s%d ", buf, allocateVector[i]);
         }
 
-   //     printf("p - enter crit to send\n");
+        printf("p    -    enter crit to send\n");
 
         for (i = 0; i < MAX_MSGS; i++) {
-            if (msgQue[i].hasBeenRead) {
-                memset(msgQue[i].buf, 0, BUFF_sz);
-                strcpy(msgQue[i].buf, buf);
-                msgQue[i].hasBeenRead = 0; // has not been read
-                msgQue[i].rra = 0;
-                msgQue[i].pid = pid;
+            if (msgQueA[i].hasBeenRead) {
+                memset(msgQueA[i].buf, 0, BUFF_sz);
+                strcpy(msgQueA[i].buf, buf);
+                msgQueA[i].hasBeenRead = 0; // has not been read
+                msgQueA[i].rra = 0;
+                msgQueA[i].pid = pid;
+                clearallovec();
                 break;
             }
         }
-  //      printf("p - sig %u\n", pid);
+              printf("p - sig %u\n", pid);
+        kill(pid,SIGUSR1);
 
-        kill(pid, SIGUSR1);
-        sem_post(semMsg);
-     //   printf("p - leave crit to send\n");
+        sem_post(semMsgA);
+
+        //   printf("p - leave crit to send\n");
 
         //leave critical
- //       printf("Parent: Send message...%s \n", buf);
+               printf("Parent: Send message...%s \n", buf);
     }
-
 }
+
 
 static void createResources(){
     struct timespec ts;
@@ -257,13 +278,19 @@ static void createResources(){
     }
     //set all msg to empty
     for ( i = 0; i < MAX_MSGS; i ++){
-        msgQue[i].hasBeenRead = 1;
+        msgQueA[i].hasBeenRead = 1;
+        msgQueG[i].hasBeenRead = 1;
     }
 
 
 
 }
-
+static void adjustSharable(){
+    int i;
+    for ( i = 0; i < 20; i++  )
+        if( resDesc[i].sharable )
+            availableVector[i] = maxVector[i];
+}
 static void appendAvailableVector(char * buf){
     int temp;
     int i;
@@ -271,6 +298,7 @@ static void appendAvailableVector(char * buf){
         sscanf(buf, "%d %[^\n]", &temp, buf);
         availableVector[ i ] += temp;
     }
+    adjustSharable();
     //   printReqArray();
 }
 static void appendRequestVector(char * buf, pid_t pid){
@@ -279,39 +307,40 @@ static void appendRequestVector(char * buf, pid_t pid){
     int i;
     for ( i = 0;i < 20; i++ ){
         sscanf(buf, "%d %[^\n]", &temp, buf);
-        requests[ pi ][i] = temp;
+        requests[ pi ][i] += temp;
     }
 }
 static void checkMSG(){
     //enter critical
-  //  printf("p- try enter crit to check\n");
-    if (!sem_trywait(semMsg)) {
+
+//    printf("p         - try enter crit to check\n");
+    if (!sem_trywait(semMsgG)) {
         int i;
         char buf[BUFF_sz];
         memset(buf, 0, BUFF_sz);
 
 
-    //    printf("p- enter crit to check\n");
+        printf("p- enter crit to check\n");
         for (i = 0; i < MAX_MSGS; i++) {
-            if (msgQue[i].rra && !msgQue[i].hasBeenRead) {
-                strcpy(buf, msgQue[i].buf);
-                if (msgQue[i].rra - 1) {  //1-> release 0->request
-//                    printf("released : %s\n", buf);
-                    msgQue[i].hasBeenRead = 1; //true
+            if (msgQueG[i].rra && !msgQueG[i].hasBeenRead) {
+                strcpy(buf, msgQueG[i].buf);
+                if (msgQueG[i].rra - 1) {  //1-> release 0->request
+                    printf("released : %s\n", buf);
+                    msgQueG[i].hasBeenRead = 1; //true
                     appendAvailableVector(buf);
                 } else {
- //                   printf("request : %s\n", buf);
-                    msgQue[i].hasBeenRead = 1; //true
-                    appendRequestVector(buf, msgQue[i].pid);
+                    printf("request : %s\n", buf);
+                    msgQueG[i].hasBeenRead = 1; //true
+                    appendRequestVector(buf, msgQueG[i].pid);
                 }
             }
         }
-  //      printf("p- leave crit to check\n");
+//        printf("p- leave crit to check\n");
 
-        sem_post(semMsg);
-        //leave critical
-    }
+        sem_post(semMsgG);
+    }//leave critical
 }
+
 static int isRequestAvailable( int i ){
     //check requests vs available
 //    printf("p- checking if res avail \n");
@@ -327,16 +356,11 @@ static int isRequestAvailable( int i ){
     }
 
     a = ( q ) ? a  : q ;//if q is 0 a<-0
-    if (!a)
-  //      printf("not avail : %i, %i\n", a, q);
+    // if (!a)
+    //      printf("not avail : %i, %i\n", a, q);
     return a;
 }
-static void adjustSharable(){
-    int i;
-    for ( i = 0; i < 20; i++  )
-        if( resDesc[i].sharable )
-            availableVector[i] = maxVector[i];
-}
+
 static void giveResources(){
     int i;
     for ( i =0 ; i < total ; i++){

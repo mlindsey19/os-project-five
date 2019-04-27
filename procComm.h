@@ -46,13 +46,16 @@ typedef struct {
 
 
 
+
 #define PERM 0755
 
 
 
 
-void deleteMsgQueMem( char * paddr );
-char * getMsgQueMem();
+void deleteMsgQueAMem( char * paddr );
+void deleteMsgQueGMem( char * paddr );
+char * getMsgQueAMem();
+char * getMsgQueGMem();
 
 sem_t * openSemAloRes();
 sem_t * openSemResDesc();

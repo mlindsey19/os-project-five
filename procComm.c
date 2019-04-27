@@ -6,12 +6,13 @@
  enum shmkeyID{
     clockshmkey = 'a',
     resdescshmkey = 'r',
-    msgqueshmkey = 'm'
+    msgqueAshmkey = 'm',
+     msgqueGshmkey = 'g'
 };
-char * getMsgQueMem(){
+char * getMsgQueAMem(){
     key_t shmkey;
 
-    if ((shmkey = ftok( KEY_PATH , msgqueshmkey)) == (key_t) -1) {
+    if ((shmkey = ftok( KEY_PATH , msgqueAshmkey)) == (key_t) -1) {
         perror("IPC error: ftok");
     }
     char * paddr;
@@ -24,10 +25,43 @@ char * getMsgQueMem(){
 
     return paddr;
 }
-void deleteMsgQueMem( char * paddr ){
+char * getMsgQueGMem(){
     key_t shmkey;
 
-    if ((shmkey = ftok( KEY_PATH , msgqueshmkey)) == (key_t) -1) {
+    if ((shmkey = ftok( KEY_PATH , msgqueGshmkey)) == (key_t) -1) {
+        perror("IPC error: ftok");
+    }
+    char * paddr;
+    int shmid = shmget ( shmkey, MAX_MSGS * BUFF_msgque, PERM | IPC_CREAT );
+
+    if ( shmid == -1 )
+        perror( "msgque get mem - error shmid" );
+
+    paddr = ( char * ) ( shmat ( shmid, 0,0));
+
+    return paddr;
+}
+
+
+void deleteMsgQueGMem( char * paddr ){
+    key_t shmkey;
+
+    if ((shmkey = ftok( KEY_PATH , msgqueGshmkey)) == (key_t) -1) {
+        perror("IPC error: ftok");
+    }
+
+    int shmid = shmget ( shmkey, MAX_MSGS * BUFF_msgque, PERM );
+
+    shmctl(shmid, IPC_RMID, NULL);
+
+    if(  shmdt( paddr )  == -1 ){
+        perror("err shmdt clock");
+    }
+}
+void deleteMsgQueAMem( char * paddr ){
+    key_t shmkey;
+
+    if ((shmkey = ftok( KEY_PATH , msgqueAshmkey)) == (key_t) -1) {
         perror("IPC error: ftok");
     }
 
