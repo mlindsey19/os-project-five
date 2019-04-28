@@ -22,8 +22,8 @@ static void giveResources();
 
 
 static pid_t pids[ PLIMIT ];
-static int processLimit = 1;
-static int activeLimit = 1;
+static int processLimit = 4;
+static int activeLimit = 4;
 static int active = 0;
 static int total = 0;
 static int maxTimeBetweenNewProcsSecs = 5;
@@ -55,17 +55,21 @@ static int allocateVector [ 20 ];
 static int availableVector[ 20 ];
 static int maxVector[ 20 ];
 static int requests[ 20 ][ 20 ];
+static int allocateMartix[ 20 ][ 20 ];
+
 
 //slowdown to prevent starvation
 static unsigned int slowdown;
 
 
 int main() {
+    total = 0;
     slowdown = 0;
     signal( SIGINT, sigHandle );
-    //  signal( SIGCHLD, childHandle );
+    signal( SIGCHLD, childHandle );
     signal( SIGALRM, sigHandle );
-    ualarm(100000,0);
+    // ualarm(900000,0);
+    alarm(7);
     communication();
     createResources();
 
@@ -82,7 +86,7 @@ int main() {
         }
         checkMSG();
 
-        childrenStatus();
+        //       childrenStatus();
         giveResources();
 
     }
@@ -148,9 +152,9 @@ void childrenStatus() {
     int i, status;
     for (i = 0; i < processLimit; i++) {
         if (pids[i] > 0) {
-      //      printf("p - checking children\n");
+            printf("p - checking children\n");
             pid = waitpid(pids[i], &status, WNOHANG);
-            if (WIFEXITED(status) && WEXITSTATUS(status) == 808 && pid != 0 ) {
+            if ( WIFEXITED(status) && WEXITSTATUS(status) == 808 ) {
                 pids[i] = 0;
                 printf( "term pid:%u\n", pid );
                 active--;
@@ -225,7 +229,7 @@ static void clearallovec(){
 
 static void sendMSG( pid_t pid ){
     //enter critical
-    printf("p - try enter crit to send\n");
+    //   printf("p - try enter crit to send\n");
     if (!sem_trywait(semMsgA)) {
 
         char buf[BUFF_sz - 1];
@@ -235,7 +239,7 @@ static void sendMSG( pid_t pid ){
             sprintf(buf, "%s%d ", buf, allocateVector[i]);
         }
 
-        printf("p    -    enter crit to send\n");
+        //       printf("p    -    enter crit to send\n");
 
         for (i = 0; i < MAX_MSGS; i++) {
             if (msgQueA[i].hasBeenRead) {
@@ -248,7 +252,7 @@ static void sendMSG( pid_t pid ){
                 break;
             }
         }
-              printf("p - sig %u\n", pid);
+        printf("p - sig %u\n", pid);
         kill(pid,SIGUSR1);
 
         sem_post(semMsgA);
@@ -256,7 +260,7 @@ static void sendMSG( pid_t pid ){
         //   printf("p - leave crit to send\n");
 
         //leave critical
-               printf("Parent: Send message...%s \n", buf);
+        printf("Parent: Send message...%s \n", buf);
     }
 }
 
@@ -287,9 +291,10 @@ static void createResources(){
 }
 static void adjustSharable(){
     int i;
-    for ( i = 0; i < 20; i++  )
-        if( resDesc[i].sharable )
+    for ( i = 0; i < 20; i++  ) {
+        if (resDesc[i].sharable)
             availableVector[i] = maxVector[i];
+    }
 }
 static void appendAvailableVector(char * buf){
     int temp;
@@ -318,9 +323,10 @@ static void checkMSG(){
         int i;
         char buf[BUFF_sz];
         memset(buf, 0, BUFF_sz);
+        adjustSharable();
 
 
-        printf("p- enter crit to check\n");
+        //   printf("p- enter crit to check\n");
         for (i = 0; i < MAX_MSGS; i++) {
             if (msgQueG[i].rra && !msgQueG[i].hasBeenRead) {
                 strcpy(buf, msgQueG[i].buf);
@@ -344,11 +350,11 @@ static void checkMSG(){
 static int isRequestAvailable( int i ){
     //check requests vs available
 //    printf("p- checking if res avail \n");
-    int j, a, q;
+    int j, a, q,z;
     a = 1;
-    for( j = q  = 0 ; j < 20 ; j++ ) {
+    for( j = q  = z = 0 ; j < 20 ; j++ ) {
         q += requests[i][j];
-
+        z += allocateMartix[i][j];
         if (requests[i][j] > availableVector[j]) {
             a = 0;
             break;
@@ -356,6 +362,7 @@ static int isRequestAvailable( int i ){
     }
 
     a = ( q ) ? a  : q ;//if q is 0 a<-0
+    a = ( q + z ) ? 1 : a;
     // if (!a)
     //      printf("not avail : %i, %i\n", a, q);
     return a;
@@ -372,6 +379,7 @@ static void giveResources(){
             for ( j =0; j < 20; j++ ) {
                 requests[i][j] = 0;
                 availableVector[j] -= allocateVector[j];
+                allocateMartix[i][j] = allocateVector[j];
             }
             adjustSharable();
             break;

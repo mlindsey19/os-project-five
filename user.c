@@ -106,7 +106,7 @@ static void initUserParams(){
     srand( (time_t )ts.tv_nsec ^ getpid()  );
     int i, max;
     for ( i = 0; i <20 ; i++ ) {
-        max = ( resDesc[ i ].total * 65 ) / 100;
+        max = ( resDesc[ i ].total * 21 ) / 100;
         maxRequestVector[ i ] = ( max ) ? ( rand() % max ) + 1 : max;
         acquiredVector[ i ] = 0;
     }
@@ -160,7 +160,7 @@ static void reduceAcquiredVector(char * buf){
 static void getMSG() {
     //enter critical
 
-    printf("c - try enter crit to get\n");
+ //   printf("c - try enter crit to get\n");
     while ( isWaitingForResources ){
 
         if( !sem_trywait(semMsgA)) {
@@ -171,7 +171,7 @@ static void getMSG() {
             pid_t pid = getpid();
 
 
-            printf("c - enter crit to get\n");
+  //          printf("c - enter crit to get\n");
             f = 0;
             for (i = 0; i < MAX_MSGS; i++) {
                 //         printf("c - rra: %i - mpid %i hsb %i %s\n", msgQue[i].rra,
@@ -200,7 +200,7 @@ static void getMSG() {
 static void sendMSG( int fl ){   // fl 1-> release 0->request
     //enter critical
 
-    printf("c - try enter crit to send\n");
+ //   printf("c - try enter crit to send\n");
     while (1){
         if ( !sem_trywait( semMsgG ) ) {
 
