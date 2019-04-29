@@ -14,16 +14,16 @@ static void generateProc();
 static void communication();
 static void sigHandle(int);
 static void childHandle(int);
-static void sendMSG( pid_t );
+static void sendMSG( pid_t, int );
 static int getIndexFromPid(int);
 static void createResources();
 static void checkMSG();
 static void giveResources();
-
+static void deadlock();
 
 static pid_t pids[ PLIMIT ];
-static int processLimit = 4;
-static int activeLimit = 4;
+static int processLimit = 12;
+static int activeLimit = 8;
 static int active = 0;
 static int total = 0;
 static int maxTimeBetweenNewProcsSecs = 5;
@@ -51,11 +51,11 @@ static sem_t * semMsgG;
 static int spinlock;
 
 // vectors
-static int allocateVector [ 20 ];
+static int aboutToAllocate [ 20 ];
 static int availableVector[ 20 ];
 static int maxVector[ 20 ];
-static int requests[ 20 ][ 20 ];
-static int allocateMartix[ 20 ][ 20 ];
+static int requests[ 20 ][ 21 ];
+static int allocatedMatrix[ 20 ][ 21 ];
 
 
 //slowdown to prevent starvation
@@ -66,14 +66,15 @@ int main() {
     total = 0;
     slowdown = 0;
     signal( SIGINT, sigHandle );
-    signal( SIGCHLD, childHandle );
+    //   signal( SIGCHLD, childHandle );
     signal( SIGALRM, sigHandle );
     // ualarm(900000,0);
-    alarm(7);
+      alarm(114);
     communication();
     createResources();
 
     nextProcTime();
+    int deadLockCheck;
     while(1){
         if( total == processLimit && active == 0)
             break;
@@ -86,9 +87,12 @@ int main() {
         }
         checkMSG();
 
-        //       childrenStatus();
+        childrenStatus();
         giveResources();
-
+        if(130 <  deadLockCheck++){
+            deadLockCheck = 0;
+            deadlock();
+        }
     }
 
     cleanSHM();
@@ -99,7 +103,7 @@ static void slowDown(){
 }
 static void printReqArray() {
     int i, j;
-    for (i = 0; i < 20; i++) {
+    for (i = 0; i < processLimit; i++) {
         printf("%i -> ", pids[i]);
 
         for (j = 0; j < 20; j++) {
@@ -150,13 +154,14 @@ void cleanSHM(){
 void childrenStatus() {
     pid_t pid;
     int i, status;
-    for (i = 0; i < processLimit; i++) {
-        if (pids[i] > 0) {
-            printf("p - checking children\n");
+    for (i = 0; i < 20; i++) {
+        if(pids[i] > 0){
             pid = waitpid(pids[i], &status, WNOHANG);
-            if ( WIFEXITED(status) && WEXITSTATUS(status) == 808 ) {
+            if (WIFEXITED(status)
+                && pid == pids[i]) {
+                i = getIndexFromPid(pid);
                 pids[i] = 0;
-                printf( "term pid:%u\n", pid );
+                printf("term pid:%u  status: %i \n", pid, WEXITSTATUS(status));
                 active--;
             }
         }
@@ -220,75 +225,6 @@ static int getIndexFromPid(int pid){
             return i;
     return 0;
 }
-static void clearallovec(){
-    int i;
-    for ( i = 0 ; i < 20; i++ ){
-        allocateVector[i] = 0;
-    }
-}
-
-static void sendMSG( pid_t pid ){
-    //enter critical
-    //   printf("p - try enter crit to send\n");
-    if (!sem_trywait(semMsgA)) {
-
-        char buf[BUFF_sz - 1];
-        memset(buf, 0, BUFF_sz - 1);
-        int i;
-        for (i = 0; i < 20; i++) {
-            sprintf(buf, "%s%d ", buf, allocateVector[i]);
-        }
-
-        //       printf("p    -    enter crit to send\n");
-
-        for (i = 0; i < MAX_MSGS; i++) {
-            if (msgQueA[i].hasBeenRead) {
-                memset(msgQueA[i].buf, 0, BUFF_sz);
-                strcpy(msgQueA[i].buf, buf);
-                msgQueA[i].hasBeenRead = 0; // has not been read
-                msgQueA[i].rra = 0;
-                msgQueA[i].pid = pid;
-                clearallovec();
-                break;
-            }
-        }
-        printf("p - sig %u\n", pid);
-        kill(pid,SIGUSR1);
-
-        sem_post(semMsgA);
-
-        //   printf("p - leave crit to send\n");
-
-        //leave critical
-        printf("Parent: Send message...%s \n", buf);
-    }
-}
-
-
-static void createResources(){
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    srand( (time_t)ts.tv_nsec  );
-
-    int i;
-    for ( i =0; i <20 ; i++){
-        resDesc[i].total = (rand() % 9) + 1;
-        maxVector[i] = resDesc[i].total;
-        availableVector[i] = maxVector[i];
-        assert(resDesc[i].total >= 0 && resDesc[i].total <= 10 && "created too many resources");
-        int p = 2000;
-        int dart = ( rand() % 99999 ) + 1; //2000/10000 -> 20% with reasonable range
-        resDesc[ i ].sharable = ( dart < p ) ? 1 : 0; //1->true
-    }
-    //set all msg to empty
-    for ( i = 0; i < MAX_MSGS; i ++){
-        msgQueA[i].hasBeenRead = 1;
-        msgQueG[i].hasBeenRead = 1;
-    }
-
-
-
-}
 static void adjustSharable(){
     int i;
     for ( i = 0; i < 20; i++  ) {
@@ -296,23 +232,104 @@ static void adjustSharable(){
             availableVector[i] = maxVector[i];
     }
 }
-static void appendAvailableVector(char * buf){
+
+static void adjustResVectors(pid_t pid){
+    int i, j;
+    i = getIndexFromPid(pid);
+    for ( j = 0 ; j < 20; j++ ){
+        allocatedMatrix[i][j] += aboutToAllocate[j];
+        availableVector[j] -= aboutToAllocate[j];
+        requests[i][j]  = 0 ;
+        aboutToAllocate[j] = 0;
+
+    }
+    adjustSharable();
+}
+
+static void sendMSG( pid_t pid, int fl ){
+    //enter critical
+    //   printf("p - try enter crit to send\n");
+    if(pid)
+        if (!sem_trywait(semMsgA)) {
+
+            char buf[BUFF_sz - 1];
+            memset(buf, 0, BUFF_sz - 1);
+            int i;
+
+            for (i = 0; i < 20; i++) {
+                sprintf(buf, "%s%d ", buf, aboutToAllocate[i]);
+            }
+
+            //       printf("p    -    enter crit to send\n");
+
+            for (i = 0; i < MAX_MSGS; i++) {
+                if (msgQueA[i].hasBeenRead) {
+                    memset(msgQueA[i].buf, 0, BUFF_sz);
+                    strcpy(msgQueA[i].buf, buf);
+                    msgQueA[i].hasBeenRead = 0; // has not been read
+                    msgQueA[i].rra =  0;
+                    msgQueA[i].pid = pid;
+                    adjustResVectors(pid);
+                    printf("p - sig %u\n", pid);
+                    kill(pid,SIGUSR1);
+                    break;
+                }
+            }
+
+
+            sem_post(semMsgA);
+
+            //   printf("p - leave crit to send\n");
+
+            //leave critical
+      //      printf("Parent: Send message...%s \n", buf);
+        }
+}
+
+static void printReqAlloAvail(pid_t pid){
+    int i, j;
+    printf("pid %i\n", pid);
+    i = getIndexFromPid(pid);
+
+    printf("req - ");
+    for ( j = 0; j < 20; j++ ) {
+        printf("%i ", requests[i][j]);
+    }
+    printf("\n");
+
+    printf("has - ");
+    for ( j = 0; j < 20; j++ ) {
+        printf("%i ", allocatedMatrix[i][j]);
+    }
+    printf("\n");
+
+    printf("available - ");
+    for ( j = 0; j < 20; j++ ) {
+        printf("%i ", availableVector[j]);
+    }
+    printf("\n");
+}
+
+static void appendAvailableVector(char * buf, pid_t pid){
     int temp;
-    int i;
-    for ( i = 0;i < 20; i++ ){
+    int i,j;
+    i = getIndexFromPid(pid);
+    for ( j = 0;i < 20; j++ ){
         sscanf(buf, "%d %[^\n]", &temp, buf);
-        availableVector[ i ] += temp;
+        availableVector[ j ] += temp;
+        allocatedMatrix[ i ][j] -= temp;
+
     }
     adjustSharable();
     //   printReqArray();
 }
 static void appendRequestVector(char * buf, pid_t pid){
     int temp;
-    int pi = getIndexFromPid(pid);
-    int i;
-    for ( i = 0;i < 20; i++ ){
+    int i = getIndexFromPid(pid);
+    int j;
+    for ( j = 0; j < 20; j++ ){
         sscanf(buf, "%d %[^\n]", &temp, buf);
-        requests[ pi ][i] += temp;
+        requests[ i ][j] += temp;
     }
 }
 static void checkMSG(){
@@ -324,20 +341,23 @@ static void checkMSG(){
         char buf[BUFF_sz];
         memset(buf, 0, BUFF_sz);
         adjustSharable();
+        pid_t pid;
 
 
         //   printf("p- enter crit to check\n");
         for (i = 0; i < MAX_MSGS; i++) {
             if (msgQueG[i].rra && !msgQueG[i].hasBeenRead) {
                 strcpy(buf, msgQueG[i].buf);
+                pid = msgQueG[i].pid;
                 if (msgQueG[i].rra - 1) {  //1-> release 0->request
-                    printf("released : %s\n", buf);
+          //          printf("released : %s\n", buf);
                     msgQueG[i].hasBeenRead = 1; //true
-                    appendAvailableVector(buf);
+                    appendAvailableVector(buf, pid);
                 } else {
-                    printf("request : %s\n", buf);
+         //           printf("request : %s\n", buf);
                     msgQueG[i].hasBeenRead = 1; //true
-                    appendRequestVector(buf, msgQueG[i].pid);
+                    appendRequestVector(buf, pid);
+                    printReqAlloAvail(pid);
                 }
             }
         }
@@ -352,17 +372,16 @@ static int isRequestAvailable( int i ){
 //    printf("p- checking if res avail \n");
     int j, a, q,z;
     a = 1;
-    for( j = q  = z = 0 ; j < 20 ; j++ ) {
+    q = 0;
+    for( j  = 0 ; j < 20 ; j++ ) {
         q += requests[i][j];
-        z += allocateMartix[i][j];
-        if (requests[i][j] > availableVector[j]) {
+        if ( ( requests[i][j] + allocatedMatrix[i][j] ) > availableVector[j]) {
             a = 0;
-            break;
         }
     }
 
-    a = ( q ) ? a  : q ;//if q is 0 a<-0
-    a = ( q + z ) ? 1 : a;
+    a = ( q == 0 ) ? 0  : a ;//if q is 0 a<-0
+    //   a = !( q + z ) ? 1 : a;
     // if (!a)
     //      printf("not avail : %i, %i\n", a, q);
     return a;
@@ -374,21 +393,91 @@ static void giveResources(){
         if ( isRequestAvailable( i ) ){
             int j;
             for ( j =0; j < 20; j++ )
-                allocateVector[j] = requests[i][j];
-            sendMSG( pids[i] );
-            for ( j =0; j < 20; j++ ) {
-                requests[i][j] = 0;
-                availableVector[j] -= allocateVector[j];
-                allocateMartix[i][j] = allocateVector[j];
-            }
-            adjustSharable();
+                aboutToAllocate[j] = requests[i][j];
+            sendMSG( pids[i] , 0);
             break;
         }
     }
 }
 
+static void deadlock(){
+    int i,j, allReq, availReq,allocated;
+    allReq = availReq =allocated = 0;
+    for (i = 0; i< 20 ; i++){
+        int isAvail = 1;
+        int thisReq =0 ;
+        for(j=0; j < 20; j++) {
+            allReq += requests[i][j];
+            thisReq += requests[i][j];
+            allocated += allocatedMatrix[i][j];
+            if ( ( requests[i][j] + allocatedMatrix[i][j] ) > availableVector[j]) {
+                isAvail = 0;
+            }
+        }
+        isAvail = ( thisReq) ? isAvail: thisReq;
+        availReq += isAvail;
+    }
+    // if sum of request == 0 -> do nothing
+    // if requests avail > 0 -> do nothing
+    // if allocated == 0 -> do nothing
+    // no deadlock
+//    int deadlockcheck = 0;
+//    if(310 <  deadlockcheck++) {
+//        deadlockcheck = 0;
+//        printf("deadlock  - ra %i - sumR %i - allo %i\n", availReq, allReq, allocated);
+//    }
+    int indexOfMost = 0;
+    int max = 0;
+    if (allReq && !availReq && allocated){
+        // restart proc with most rec
+
+        for (i = 0; i < 20 ; i++) {
+            int numRes = 0;
+            for (j = 0; j < 20; j++) {
+                numRes += allocatedMatrix[i][j];
+            }
+            if (max < numRes) {
+                max = numRes;
+                indexOfMost = i;
+            }
+        }
+      //  sendMSG(pids[ indexOfMost ],1);
+      if(max) {
+          kill(pids[indexOfMost], SIGUSR2);
+          printReqArray();
+          printf("**************************deadlock %i\n", pids[indexOfMost]);
+
+          sleep(1);
+      }
+    }
+
+
+}
 
 
 
 
+static void createResources(){
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    srand( (time_t)ts.tv_nsec  );
 
+    int i;
+    for ( i =0; i <20 ; i++){
+        resDesc[i].total = (rand() % 9) + 1;
+        maxVector[i] = resDesc[i].total;
+        availableVector[i] = maxVector[i];
+        assert(resDesc[i].total >= 0 && resDesc[i].total <= 10 && "created too many resources");
+        int p = 20;
+        int dart = ( rand() % 99 ) + 1; //20%
+        resDesc[ i ].sharable = ( dart < p ) ? 1 : 0; //1->true
+    }
+    //set all msg to empty
+    for ( i = 0; i < MAX_MSGS; i ++){
+        msgQueA[i].hasBeenRead = 1;
+        msgQueG[i].hasBeenRead = 1;
+    }
+
+
+
+}
