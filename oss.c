@@ -22,8 +22,8 @@ static void giveResources();
 static void deadlock();
 
 static pid_t pids[ PLIMIT ];
-static int processLimit = 12;
-static int activeLimit = 8;
+static int processLimit = 4;
+static int activeLimit = 3;
 static int active = 0;
 static int total = 0;
 static int maxTimeBetweenNewProcsSecs = 5;
@@ -48,14 +48,13 @@ static MsgQue * msgQueG;
 static MsgQue * msgQueA;
 static sem_t * semMsgA;
 static sem_t * semMsgG;
-static int spinlock;
 
 // vectors
 static int aboutToAllocate [ 20 ];
 static int availableVector[ 20 ];
 static int maxVector[ 20 ];
-static int requests[ 20 ][ 21 ];
-static int allocatedMatrix[ 20 ][ 21 ];
+static int requests[ 20 ][ 20 ];
+static int allocatedMatrix[ 20 ][ 20 ];
 
 
 //slowdown to prevent starvation
@@ -74,7 +73,7 @@ int main() {
     createResources();
 
     nextProcTime();
-    int deadLockCheck;
+    int deadLockCheck =0;
     while(1){
         if( total == processLimit && active == 0)
             break;
@@ -267,11 +266,12 @@ static void sendMSG( pid_t pid, int fl ){
                     memset(msgQueA[i].buf, 0, BUFF_sz);
                     strcpy(msgQueA[i].buf, buf);
                     msgQueA[i].hasBeenRead = 0; // has not been read
-                    msgQueA[i].rra =  0;
+                    msgQueA[i].rra =  0 - fl;
                     msgQueA[i].pid = pid;
+                    if(!fl)
                     adjustResVectors(pid);
-                    printf("p - sig %u\n", pid);
-                    kill(pid,SIGUSR1);
+             //       printf("p - sig %u\n", pid);
+               //     kill(pid,SIGUSR1);
                     break;
                 }
             }
@@ -314,7 +314,7 @@ static void appendAvailableVector(char * buf, pid_t pid){
     int temp;
     int i,j;
     i = getIndexFromPid(pid);
-    for ( j = 0;i < 20; j++ ){
+    for ( j = 0; j < 20; j++ ){
         sscanf(buf, "%d %[^\n]", &temp, buf);
         availableVector[ j ] += temp;
         allocatedMatrix[ i ][j] -= temp;
@@ -441,13 +441,13 @@ static void deadlock(){
                 indexOfMost = i;
             }
         }
-      //  sendMSG(pids[ indexOfMost ],1);
       if(max) {
-          kill(pids[indexOfMost], SIGUSR2);
+         // kill(pids[indexOfMost], SIGUSR2);
           printReqArray();
           printf("**************************deadlock %i\n", pids[indexOfMost]);
+          sendMSG(pids[ indexOfMost ],1);
 
-          sleep(1);
+        //  sleep(1);
       }
     }
 

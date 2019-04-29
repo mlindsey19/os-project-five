@@ -52,7 +52,7 @@ int sig;
 
 
 int main() {
-    signal(SIGUSR1, sigHandle);
+    //   signal(SIGUSR1, sigHandle);
     signal(SIGUSR2, sigHandle);
     communication();
     initUserParams();
@@ -60,14 +60,17 @@ int main() {
     printf("hi %i\n", getpid());
     int i=1;
     while (1) {
-        if ( isWaitingForResources )
-            continue; //waiting
+//        if ( isWaitingForResources )
+//            continue; //waiting
         if ( simClock->sec >= nextRes.sec && simClock->ns > nextRes.ns ){
 
             if( i++ ) {
                 askForMore();
                 i -= 2;
-                //  getMSG();
+                while(isWaitingForResources){
+                    getMSG();
+                    usleep(1000);
+                }
             }else
                 giveUpSome();
         }
@@ -190,88 +193,89 @@ static void reduceAcquiredVector(char * buf){
 static void getMSG() {
     //enter critical
 
-    //   printf("c - try enter crit to get\n");
-    while ( isWaitingForResources ){
+//       printf("c - try enter crit to get\n");
 
-        if( !sem_trywait(semMsgA)) {
+    if( !sem_trywait(semMsgA)) {
 
-            int i;
-            char buf[BUFF_sz];
-            memset(buf, 0, BUFF_sz);
-            pid_t pid = getpid();
+        int i;
+        char buf[BUFF_sz];
+        memset(buf, 0, BUFF_sz);
+        pid_t pid = getpid();
 
+        int fl = 0;
+//                      printf("c - enter crit to get\n");
+        for (i = 0; i < MAX_MSGS; i++) {
+            //         printf("c - rra: %i - mpid %i hsb %i %s\n", msgQue[i].rra,
+            //                msgQue[i].pid, msgQue[i].hasBeenRead, buf);
 
-            //          printf("c - enter crit to get\n");
-            for (i = 0; i < MAX_MSGS; i++) {
-                //         printf("c - rra: %i - mpid %i hsb %i %s\n", msgQue[i].rra,
-                //                msgQue[i].pid, msgQue[i].hasBeenRead, buf);
+            if (msgQueA[i].rra < 1 && msgQueA[i].pid == pid && !msgQueA[i].hasBeenRead) {
+                strncpy(buf, msgQueA[i].buf, (BUFF_sz - 1));
+      //          printf("child: Received message: %s\n", buf);
+                msgQueA[i].hasBeenRead = 1;//true
+                if( msgQueA[i].rra < 0 ) {
+                  giveAllBack();
 
-                if (msgQueA[i].rra < 1 && msgQueA[i].pid == pid && !msgQueA[i].hasBeenRead) {
-                    strncpy(buf, msgQueA[i].buf, (BUFF_sz - 1));
-                //    printf("child: Received message: %s\n", buf);
-                    msgQueA[i].hasBeenRead = 1;//true
+                } else{
                     appendAcquiredVector(buf);
-                    isWaitingForResources = 0 ;
+                    isWaitingForResources = 0;
                     printf("c %i - done waiting  \n", getpid());
-
-                    break;
                 }
+
+                break;
             }
-            sem_post(semMsgA);
-//            if (fl)
-//                giveAllBack();
-            //   printf("c - leave crit to get\n");
-            //leave critical
         }
+        sem_post(semMsgA);
+        if (fl)
+            giveAllBack();
+        //   printf("c - leave crit to get\n");
+        //leave critical
     }
 }
+
 static void sendMSG( int fl ){   // fl 1-> release 0->request
     //enter critical
 
     //   printf("c - try enter crit to send\n");
-    int notSent =1;
-    while(notSent){
-        usleep(1000);
 
-        if ( !sem_trywait( semMsgG ) ) {
 
-            char buf[BUFF_sz];
-            memset(buf, 0, BUFF_sz);
+    if ( !sem_trywait( semMsgG ) ) {
 
-            int i;
-            for (i = 0; i < 20; i++) {
-                if (fl)
-                    sprintf(buf, "%s%d ", buf, releaseVector[i]);
-                else
-                    sprintf(buf, "%s%d ", buf, requestVector[i]);
-            }
-            //        printf("c - enter crit to send\n");
+        char buf[BUFF_sz];
+        memset(buf, 0, BUFF_sz);
 
-            for (i = 0; i < MAX_MSGS; i++) {
-                if (msgQueG[i].hasBeenRead) {
-                    memset(msgQueG[i].buf, 0, BUFF_sz);
-                    strcpy(msgQueG[i].buf, buf);
-                    msgQueG[i].hasBeenRead = 0; // has not been read
-                    msgQueG[i].rra = 1 + fl;
-                    msgQueG[i].pid = getpid();
-          //          printf("child %i: Send message..  %s - fl %i\n", getpid(), buf, fl);
-                    if (!fl) {
-                        isWaitingForResources = 1;
-                        printf("c %i - is waiting  \n", getpid());
-                    } else
-                        reduceAcquiredVector(buf);
-                    notSent = 0;
-                    break;
-                }
-            }
-
-            sem_post(semMsgG);
-
-            //       printf("c - leave crit to send\n");
-
-            //leave critical
-
+        int i;
+        for (i = 0; i < 20; i++) {
+            if (fl)
+                sprintf(buf, "%s%d ", buf, releaseVector[i]);
+            else
+                sprintf(buf, "%s%d ", buf, requestVector[i]);
         }
+        //        printf("c - enter crit to send\n");
+
+        for (i = 0; i < MAX_MSGS; i++) {
+            if (msgQueG[i].hasBeenRead) {
+                memset(msgQueG[i].buf, 0, BUFF_sz);
+                strcpy(msgQueG[i].buf, buf);
+                msgQueG[i].hasBeenRead = 0; // has not been read
+                msgQueG[i].rra = 1 + fl;
+                msgQueG[i].pid = getpid();
+     //           printf("child %i: Send message..  %s - fl %i\n", getpid(), buf, fl);
+                if (!fl) {
+                    isWaitingForResources = 1;
+          //          printf("c %i - is waiting  \n", getpid());
+                } else
+                    reduceAcquiredVector(buf);
+                break;
+            }
+        }
+
+        sem_post(semMsgG);
+
+        //       printf("c - leave crit to send\n");
+
+        //leave critical
+
+
     }
 }
 void askForMore(){
@@ -360,10 +364,10 @@ static void giveAllBack() {
                     msgQueG[i].hasBeenRead = 0; // has not been read
                     msgQueG[i].rra = 2;
                     msgQueG[i].pid = getpid();
-               //     printf("child %i: Send all back..  %s \n", getpid(), buf);
+                    //     printf("child %i: Send all back..  %s \n", getpid(), buf);
                     reduceAcquiredVector(buf);
                     isWaitingForResources = 0;
-                    printf("c %i - done waiting  \n", getpid());
+             //       printf("c %i - done waiting  \n", getpid());
                     notSent = 0;
                     break;
                 }
