@@ -421,11 +421,11 @@ static void deadlock(){
     // if requests avail > 0 -> do nothing
     // if allocated == 0 -> do nothing
     // no deadlock
-//    int deadlockcheck = 0;
-//    if(310 <  deadlockcheck++) {
-//        deadlockcheck = 0;
-//        printf("deadlock  - ra %i - sumR %i - allo %i\n", availReq, allReq, allocated);
-//    }
+    int deadlockcheck = 0;
+    if(310 <  deadlockcheck++) {
+        deadlockcheck = 0;
+        printf("deadlock  - ra %i - sumR %i - allo %i\n", availReq, allReq, allocated);
+    }
     int indexOfMost = 0;
     int max = 0;
     if (allReq && !availReq && allocated){

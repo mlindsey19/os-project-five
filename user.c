@@ -217,7 +217,7 @@ static void getMSG() {
                 } else{
                     appendAcquiredVector(buf);
                     isWaitingForResources = 0;
-                    printf("c %i - done waiting  \n", getpid());
+                  //  printf("c %i - done waiting  \n", getpid());
                 }
 
                 break;
