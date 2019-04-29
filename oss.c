@@ -286,29 +286,29 @@ static void sendMSG( pid_t pid, int fl ){
         }
 }
 
-static void printReqAlloAvail(pid_t pid){
-    int i, j;
-    printf("pid %i\n", pid);
-    i = getIndexFromPid(pid);
-
-    printf("req - ");
-    for ( j = 0; j < 20; j++ ) {
-        printf("%i ", requests[i][j]);
-    }
-    printf("\n");
-
-    printf("has - ");
-    for ( j = 0; j < 20; j++ ) {
-        printf("%i ", allocatedMatrix[i][j]);
-    }
-    printf("\n");
-
-    printf("available - ");
-    for ( j = 0; j < 20; j++ ) {
-        printf("%i ", availableVector[j]);
-    }
-    printf("\n");
-}
+//static void printReqAlloAvail(pid_t pid){
+//    int i, j;
+//    printf("pid %i\n", pid);
+//    i = getIndexFromPid(pid);
+//
+//    printf("req - ");
+//    for ( j = 0; j < 20; j++ ) {
+//        printf("%i ", requests[i][j]);
+//    }
+//    printf("\n");
+//
+//    printf("has - ");
+//    for ( j = 0; j < 20; j++ ) {
+//        printf("%i ", allocatedMatrix[i][j]);
+//    }
+//    printf("\n");
+//
+//    printf("available - ");
+//    for ( j = 0; j < 20; j++ ) {
+//        printf("%i ", availableVector[j]);
+//    }
+//    printf("\n");
+//}
 
 static void appendAvailableVector(char * buf, pid_t pid){
     int temp;
@@ -357,7 +357,7 @@ static void checkMSG(){
          //           printf("request : %s\n", buf);
                     msgQueG[i].hasBeenRead = 1; //true
                     appendRequestVector(buf, pid);
-                    printReqAlloAvail(pid);
+               //     printReqAlloAvail(pid);
                 }
             }
         }

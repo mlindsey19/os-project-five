@@ -141,7 +141,7 @@ static void initUserParams(){
     }
     requestOrReleaseRate = BILLION ;
 
-    minTimeAlive.sec = 3 +  simClock->sec;
+    minTimeAlive.sec = 5 +  simClock->sec;
     minTimeAlive.ns = 0;// ( rand() % BILLION )  + simClock->ns;
     //printf("%i - %is %ins \n ",getpid(), minTimeAlive.sec, minTimeAlive.ns  );
 
@@ -164,9 +164,9 @@ static void communication(){
     msgqueAaddr = getMsgQueAMem();
     msgQueA = ( MsgQue *) msgqueAaddr;
 
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGUSR1);
-    sigaddset(&sigset, SIGUSR2);
+//    sigemptyset(&sigset);
+//    sigaddset(&sigset, SIGUSR1);
+//    sigaddset(&sigset, SIGUSR2);
 
 }
 static void appendAcquiredVector(char * buf){
@@ -202,7 +202,6 @@ static void getMSG() {
         memset(buf, 0, BUFF_sz);
         pid_t pid = getpid();
 
-        int fl = 0;
 //                      printf("c - enter crit to get\n");
         for (i = 0; i < MAX_MSGS; i++) {
             //         printf("c - rra: %i - mpid %i hsb %i %s\n", msgQue[i].rra,
@@ -225,8 +224,7 @@ static void getMSG() {
             }
         }
         sem_post(semMsgA);
-        if (fl)
-            giveAllBack();
+
         //   printf("c - leave crit to get\n");
         //leave critical
     }
@@ -286,7 +284,10 @@ void askForMore(){
     t =0;
     adjustSharable();
     for ( i = 0; i <20 ; i++){
+        assert(acquiredVector[i]>= 0 );
+        assert(requestVector[i]>= 0 );
         max = maxRequestVector[ i ] - acquiredVector[ i ] - requestVector[ i ];
+     //  max = ( resDesc[i].sharable );
         assert(maxRequestVector[i] >= max);
         if(max < 1)
             requestVector[ i ] = 0;
