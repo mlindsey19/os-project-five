@@ -69,7 +69,7 @@ int main() {
                 i -= 2;
                 while(isWaitingForResources){
                     getMSG();
-                    usleep(1000);
+                    usleep(100);
                 }
             }else
                 giveUpSome();
@@ -126,7 +126,7 @@ static void initUserParams(){
     srand( (time_t )ts.tv_nsec ^ getpid()  );
     int i, max;
     for ( i = 0; i <20 ; i++ ) {
-        max = ( resDesc[ i ].total * 16 ) / 100;
+        max = ( resDesc[ i ].total * 46 ) / 100;
         if(max <= 0)
             maxRequestVector[i] = 0;
         else if (max == 1)
@@ -141,8 +141,8 @@ static void initUserParams(){
     }
     requestOrReleaseRate = BILLION ;
 
-    minTimeAlive.sec = ( ( rand() % 10 ) + 1 ) +  simClock->sec;
-    minTimeAlive.ns =  ( rand() % BILLION )  + simClock->ns;
+    minTimeAlive.sec = 3 +  simClock->sec;
+    minTimeAlive.ns = 0;// ( rand() % BILLION )  + simClock->ns;
     //printf("%i - %is %ins \n ",getpid(), minTimeAlive.sec, minTimeAlive.ns  );
 
     nextRes.sec = simClock->sec;
@@ -344,7 +344,7 @@ static void giveAllBack() {
     //   printf("c - try enter crit to send all\n");
     int notSent = 1;
     while (notSent) {
-        usleep(1000);
+        usleep(100);
         if (!sem_trywait(semMsgG)) {
             char buf[BUFF_sz];
             memset(buf, 0, BUFF_sz);

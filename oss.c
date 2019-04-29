@@ -22,8 +22,8 @@ static void giveResources();
 static void deadlock();
 
 static pid_t pids[ PLIMIT ];
-static int processLimit = 4;
-static int activeLimit = 3;
+static int processLimit = 20;
+static int activeLimit = 18;
 static int active = 0;
 static int total = 0;
 static int maxTimeBetweenNewProcsSecs = 5;
@@ -122,7 +122,7 @@ static void increment(){
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     srand( (time_t)ts.tv_nsec );    //simClock->sec++;
-    simClock->ns += rand() % 100000000;
+    simClock->ns += rand() % BILLION;
     if (simClock->ns > BILLION ){
         simClock->sec++;
         simClock->ns -= BILLION;
